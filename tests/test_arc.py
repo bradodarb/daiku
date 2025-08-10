@@ -5,16 +5,38 @@ import sys
 # installing the package.
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 
+import math
+
 from daiku.geo.base import V3D
-from daiku.geo.arc import Arc, ArcDirection
+from daiku.geo.arc import Arc, ArcDirection, CenterArcConfig, ThreePointArcConfig
 
 
 def test_arc_initializes_components():
     center = V3D(1.0, 2.0, 3.0)
-    arc = Arc("gid", center, 5.0, 0.0, 1.0, ArcDirection.CW)
+    cfg = CenterArcConfig(center, 5.0, 0.0, 1.0, ArcDirection.CW)
+    arc = Arc("gid", cfg)
 
     assert arc.center == center
     assert arc.radius == 5.0
     assert arc.start_angle == 0.0
     assert arc.end_angle == 1.0
     assert arc.direction is ArcDirection.CW
+
+
+def test_arc_constructed_from_points():
+    start = V3D(1.0, 0.0, 0.0)
+    mid = V3D(math.sqrt(0.5), math.sqrt(0.5), 0.0)
+    end = V3D(0.0, 1.0, 0.0)
+
+    cfg = ThreePointArcConfig(start, mid, end)
+    arc = Arc("gid", cfg)
+
+    assert math.isclose(arc.center.x, 0.0, abs_tol=1e-9)
+    assert math.isclose(arc.center.y, 0.0, abs_tol=1e-9)
+    assert math.isclose(arc.radius, 1.0, rel_tol=1e-9)
+    assert math.isclose(arc.start_angle, 0.0, abs_tol=1e-9)
+    assert math.isclose(arc.end_angle, math.pi / 2, rel_tol=1e-9)
+    assert arc.direction is ArcDirection.CCW
+    assert arc.start == start
+    assert arc.mid == mid
+    assert arc.end == end
