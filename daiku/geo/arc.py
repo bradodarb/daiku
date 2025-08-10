@@ -34,10 +34,8 @@ class ArcConfig(ABC):
     """Base configuration strategy for defining an arc."""
 
     @abstractmethod
-    def compute(
-        self,
-    ) -> tuple[V3D, float, float, float, ArcDirection, V3D, V3D, V3D]:
-        """Return the full geometric description of the arc."""
+    def compute(self, arc: "Arc") -> None:
+        """Populate ``arc`` with the full geometric description."""
 
 
 @dataclass
@@ -48,26 +46,21 @@ class CenterArcConfig(ArcConfig):
     end_angle: float
     direction: ArcDirection = ArcDirection.CCW
 
-    def compute(self):  # pragma: no cover - thin delegation
-        start = _point_from_angle(self.center, self.radius, self.start_angle)
-        end = _point_from_angle(self.center, self.radius, self.end_angle)
+    def compute(self, arc: "Arc") -> None:  # pragma: no cover - thin delegation
+        arc.center = self.center
+        arc.radius = self.radius
+        arc.start_angle = self.start_angle
+        arc.end_angle = self.end_angle
+        arc.direction = self.direction
+        arc.start = _point_from_angle(self.center, self.radius, self.start_angle)
+        arc.end = _point_from_angle(self.center, self.radius, self.end_angle)
         if self.direction is ArcDirection.CCW:
             sweep = (self.end_angle - self.start_angle) % (2 * math.pi)
             mid_angle = self.start_angle + sweep / 2.0
         else:
             sweep = (self.start_angle - self.end_angle) % (2 * math.pi)
             mid_angle = self.start_angle - sweep / 2.0
-        mid = _point_from_angle(self.center, self.radius, mid_angle)
-        return (
-            self.center,
-            self.radius,
-            self.start_angle,
-            self.end_angle,
-            self.direction,
-            start,
-            end,
-            mid,
-        )
+        arc.mid = _point_from_angle(self.center, self.radius, mid_angle)
 
 
 @dataclass
@@ -76,7 +69,7 @@ class ThreePointArcConfig(ArcConfig):
     mid: V3D
     end: V3D
 
-    def compute(self):
+    def compute(self, arc: "Arc") -> None:
         x1, y1 = self.start.x, self.start.y
         x2, y2 = self.mid.x, self.mid.y
         x3, y3 = self.end.x, self.end.y
@@ -91,26 +84,67 @@ class ThreePointArcConfig(ArcConfig):
         cx = (bc * (y2 - y3) - cd * (y1 - y2)) / det
         cy = ((x1 - x2) * cd - (x2 - x3) * bc) / det
         cz = self.start.z
-        center = V3D(cx, cy, cz)
+        arc.center = V3D(cx, cy, cz)
 
-        radius = math.hypot(cx - x1, cy - y1)
+        arc.radius = math.hypot(cx - x1, cy - y1)
 
-        start_angle = math.atan2(y1 - cy, x1 - cx)
-        end_angle = math.atan2(y3 - cy, x3 - cx)
+        arc.start_angle = math.atan2(y1 - cy, x1 - cx)
+        arc.end_angle = math.atan2(y3 - cy, x3 - cx)
 
         orientation = (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1)
-        direction = ArcDirection.CCW if orientation > 0 else ArcDirection.CW
+        arc.direction = ArcDirection.CCW if orientation > 0 else ArcDirection.CW
 
-        return (
-            center,
-            radius,
-            start_angle,
-            end_angle,
-            direction,
-            self.start,
-            self.end,
-            self.mid,
-        )
+        arc.start = self.start
+        arc.end = self.end
+        arc.mid = self.mid
+
+
+@dataclass
+class EndpointsArcConfig(ArcConfig):
+    start: V3D
+    end: V3D
+    radius: float
+    direction: ArcDirection = ArcDirection.CCW
+
+    def compute(self, arc: "Arc") -> None:
+        x1, y1 = self.start.x, self.start.y
+        x2, y2 = self.end.x, self.end.y
+
+        dx = x2 - x1
+        dy = y2 - y1
+        q = math.hypot(dx, dy)
+        if q == 0:
+            raise ValueError("Start and end points cannot be the same")
+        if self.radius < q / 2.0:
+            raise ValueError("Radius too small for the given points")
+
+        mx = (x1 + x2) / 2.0
+        my = (y1 + y2) / 2.0
+        h = math.sqrt(self.radius * self.radius - (q / 2.0) * (q / 2.0))
+        ux = -dy / q
+        uy = dx / q
+        if self.direction is ArcDirection.CCW:
+            cx = mx + ux * h
+            cy = my + uy * h
+        else:
+            cx = mx - ux * h
+            cy = my - uy * h
+
+        arc.center = V3D(cx, cy, self.start.z)
+        arc.radius = self.radius
+        arc.direction = self.direction
+
+        arc.start_angle = math.atan2(y1 - cy, x1 - cx)
+        arc.end_angle = math.atan2(y2 - cy, x2 - cx)
+        arc.start = self.start
+        arc.end = self.end
+        if self.direction is ArcDirection.CCW:
+            sweep = (arc.end_angle - arc.start_angle) % (2 * math.pi)
+            mid_angle = arc.start_angle + sweep / 2.0
+        else:
+            sweep = (arc.start_angle - arc.end_angle) % (2 * math.pi)
+            mid_angle = arc.start_angle - sweep / 2.0
+        arc.mid = _point_from_angle(arc.center, self.radius, mid_angle)
 
 
 # ---------------------------------------------------------------------------
@@ -133,16 +167,7 @@ class Arc(GeoBase):
 
     def __init__(self, gid: str, config: ArcConfig):
         super().__init__(gid)
-        (
-            self.center,
-            self.radius,
-            self.start_angle,
-            self.end_angle,
-            self.direction,
-            self.start,
-            self.end,
-            self.mid,
-        ) = config.compute()
+        config.compute(self)
 
     @classmethod
     def from_center(
@@ -166,3 +191,16 @@ class Arc(GeoBase):
         """Construct an :class:`Arc` from three points."""
 
         return cls(gid, ThreePointArcConfig(start, mid, end))
+
+    @classmethod
+    def from_endpoints(
+        cls,
+        gid: str,
+        start: V3D,
+        end: V3D,
+        radius: float,
+        direction: ArcDirection = ArcDirection.CCW,
+    ) -> "Arc":
+        """Construct an :class:`Arc` from two end points and a radius."""
+
+        return cls(gid, EndpointsArcConfig(start, end, radius, direction))
