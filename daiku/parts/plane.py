@@ -36,14 +36,9 @@ class Plane(GeoBase):
         to CNC tool paths.
     """
 
-    gid: str
     origin: Point
     normal: V3D
     shapes: List[List[V2D]] = field(default_factory=list)
-
-    def __post_init__(self) -> None:  # pragma: no cover - trivial
-        # Initialise GeoBase with the provided identifier.
-        super().__init__(self.gid)
 
     def add_shape(self, shape: List[V2D]) -> None:
         """Attach a 2‑D shape to this plane.
