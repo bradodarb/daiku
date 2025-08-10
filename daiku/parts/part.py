@@ -34,7 +34,6 @@ class Part(GeoBase):
         Dimensions of the part along the X, Y and Z axes respectively.
     """
 
-    gid: str
     origin: Point
     width: float
     height: float
@@ -42,7 +41,6 @@ class Part(GeoBase):
     sides: Dict[str, Plane] = field(init=False)
 
     def __post_init__(self) -> None:
-        super().__init__(self.gid)
         self.sides = self._create_sides()
 
     # ------------------------------------------------------------------

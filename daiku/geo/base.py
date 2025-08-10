@@ -2,9 +2,9 @@ from abc import ABC
 from dataclasses import dataclass
 
 
+@dataclass
 class GeoBase(ABC):
-    def __init__(self, gid: str):
-        self.gid = gid
+    gid: str
 
 
 @dataclass
