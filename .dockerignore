@@ -1,0 +1,4 @@
+node_modules
+scylla-data
+__pycache__
+tests
