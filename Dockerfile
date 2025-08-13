@@ -1,4 +1,5 @@
-FROM python:3.11-slim
+# Use Python 3.10 to match the numpy wheels in requirements.txt
+FROM python:3.10-slim
 
 WORKDIR /app
 COPY requirements.txt .
